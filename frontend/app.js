@@ -44,7 +44,7 @@ let currentDynamics = JSON.parse(JSON.stringify(BASE_DYNAMICS));
 
 // TODO: 部署後端到 Render 後，把下面網址換成您自己的 Render 服務網址
 // 例如 'https://gear-scheduler-backend.onrender.com'
-const DEFAULT_BACKEND_URL = 'https://YOUR-RENDER-APP-NAME.onrender.com';
+const DEFAULT_BACKEND_URL = 'https://zero716-hv92.onrender.com';
 
 function getBackendUrl() {
     const url = (localStorage.getItem('backend_url') || DEFAULT_BACKEND_URL).trim();
