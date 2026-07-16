@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>齒輪智慧排程與插單評估系統 (Gear Intelligent Scheduling System)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+
+    <!-- Custom Modal Overlay -->
+    <div id="modal-overlay" class="hidden">
+        <div id="custom-modal" class="modal-box">
+            <h3 id="modal-title">標題</h3>
+            <div id="modal-body">內容</div>
+            <div class="modal-actions">
+                <button id="modal-btn-cancel" class="btn btn-secondary">取消</button>
+                <button id="modal-btn-confirm" class="btn btn-primary">確認</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backend URL Settings Modal -->
+    <div id="settings-modal" class="hidden" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px);">
+        <div class="modal-box" style="background: #fff; padding: 2rem; border-radius: 12px; width: 480px;">
+            <h3>⚙️ 系統設定 (後端服務)</h3>
+            <div class="form-group mt-3">
+                <label>後端服務網址 (Backend API URL)</label>
+                <input type="url" id="input-backend-url" placeholder="https://your-app-name.onrender.com" style="width: 100%; padding: 0.8rem; border: 1px solid #cbd5e1; border-radius: 6px;">
+                <small class="text-muted" style="display: block; margin-top: 0.5rem;">請填入部署在 Render（或其他平台）上的後端服務網址。Gemini API Key 現在只存放於後端伺服器環境變數中，不會出現在瀏覽器裡。此網址僅儲存在您目前瀏覽器的 localStorage 中。</small>
+            </div>
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.5rem;">
+                <button id="btn-close-settings" class="btn" style="background: #e2e8f0; color: #475569;">取消</button>
+                <button id="btn-save-settings" class="btn btn-primary">儲存設定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- View 1: Login -->
+    <div id="view-login" class="view-container active">
+        <div class="login-box">
+            <div class="brand">
+                <div class="logo"></div>
+                <h2>Gear Intelligent Scheduling</h2>
+                <p>齒輪智慧排程系統</p>
+            </div>
+            <div class="form-group">
+                <label>員工編號</label>
+                <input type="text" id="login-emp-id" placeholder="如 EMP-808" value="EMP-808">
+            </div>
+            <div class="form-group">
+                <label>密碼</label>
+                <input type="password" id="login-password" placeholder="輸入密碼" value="808">
+            </div>
+            <div class="login-hint">
+                <small>測試帳號：EMP-808/808 (主管) · EMP-101/101 (生管) · EMP-202/202 (領班)</small>
+            </div>
+            <button id="btn-login" class="btn btn-primary btn-block">登入系統</button>
+        </div>
+    </div>
+
+    <!-- View 2: Dashboard -->
+    <div id="view-dashboard" class="view-container hidden">
+        <header class="app-header">
+            <div class="header-left">
+                <h2>即時產線看板 <span class="badge">Live</span></h2>
+            </div>
+            <div class="header-right">
+                <span id="current-user-info" class="user-info">EMP-808 (Manager)</span>
+                <button id="btn-settings" class="btn btn-text" title="系統設定">⚙️</button>
+                <button id="btn-nav-backend" class="btn btn-outline">📚 後端管理</button>
+                <button id="btn-logout" class="btn btn-text">登出</button>
+            </div>
+        </header>
+
+        <main class="dashboard-content">
+
+            <!-- Machine Status -->
+            <section class="machine-status">
+                <h3>廠區機台運作狀態 (去識別化監控)</h3>
+                <div class="machine-grid" id="machine-grid"></div>
+            </section>
+
+            <!-- 30-Day Gantt Chart -->
+            <section class="gantt-master">
+                <h3>全廠 30 日實體生產排程甘特圖</h3>
+                <div class="gantt-container" id="gantt-master-container"></div>
+                <div class="gantt-legend">
+                    <span class="legend-item"><span class="color-box bg-blue"></span>車床粗加工</span>
+                    <span class="legend-item"><span class="color-box bg-indigo"></span>滾齒切齒</span>
+                    <span class="legend-item"><span class="color-box bg-green"></span>磨齒精加工</span>
+                    <span class="legend-item"><span class="color-box" style="background: repeating-linear-gradient(45deg, #e2e8f0, #e2e8f0 3px, #cbd5e1 3px, #cbd5e1 6px); border: 1px solid #cbd5e1;"></span>機台換線 (Setup)</span>
+                </div>
+            </section>
+
+            <!-- Order List -->
+            <section class="order-list">
+                <div class="section-header" style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <h3>現有排程工單列表</h3>
+                        <small class="text-muted">輸入新工單請點擊右方按鈕</small>
+                    </div>
+                    <button id="btn-nav-eval" class="btn btn-primary" style="gap: 0.4rem;">➕ 插單模擬評估</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>工單編號</th>
+                                <th>齒輪規格</th>
+                                <th>數量</th>
+                                <th>工時預估</th>
+                                <th>期望交期</th>
+                                <th>完工預估</th>
+                                <th>狀態 / 罰款</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="order-tbody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Schedule Logs -->
+            <section class="logs-section">
+                <h3>生產履歷與操作日誌 (ScheduleLogs)</h3>
+                <div class="log-container" id="log-container"></div>
+            </section>
+        </main>
+    </div>
+    <!-- View 3: Backend Management -->
+    <div id="view-backend" class="view-container hidden">
+        <header class="app-header">
+            <div class="header-left">
+                <button id="btn-back-from-backend" class="btn btn-text">← 返回看板</button>
+                <h2>📚 後端管理中心</h2>
+            </div>
+            <div class="header-right">
+                <span id="backend-user-info" class="user-info"></span>
+                <button id="btn-nav-eval-from-backend" class="btn btn-outline">插單模擬評估</button>
+            </div>
+        </header>
+
+        <main class="dashboard-content">
+            <!-- Historical Orders -->
+            <section class="backend-section" style="margin-top: 2rem;">
+                <h3>📦 曾經添加的訂單 (Historical Orders)</h3>
+                <div class="table-responsive" style="margin-top: 1rem;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>工單編號</th><th>規格</th><th>數量</th><th>交期</th><th>實際完工</th><th>是否遲交</th><th>實質淨利</th><th>狀態</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historical-orders-tbody">
+                            <tr><td colspan="8" class="text-muted" style="text-align:center; padding:1rem;">尚無已完工歸檔訂單</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Production History -->
+            <section class="backend-section" style="margin-top: 2rem;">
+                <h3>🏭 生產履歷 (Production History / Traceability)</h3>
+                <div class="table-responsive" style="margin-top: 1rem;">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>工單編號</th><th>車床機台</th><th>滾齒機台</th><th>磨齒機台</th><th>操作員</th><th>環境快照 (AI 係數)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="production-history-tbody">
+                            <tr><td colspan="6" class="text-muted" style="text-align:center; padding:1rem;">尚無生產履歷</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Schedule Logs -->
+            <section class="backend-section" style="margin-top: 2rem; margin-bottom: 3rem;">
+                <h3>📋 操作日誌 (ScheduleLogs)</h3>
+                <div id="log-container-backend" class="log-container" style="margin-top: 1rem;"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- View 4: Evaluation -->
+    <div id="view-evaluation" class="view-container hidden">
+        <header class="app-header">
+            <div class="header-left">
+                <button id="btn-back-dashboard" class="btn btn-text">← 返回看板</button>
+                <h2>插單模擬與最佳化評估</h2>
+            </div>
+        </header>
+        
+        <main class="evaluation-content">
+            <div class="eval-layout">
+                <!-- Input Panel -->
+                <div class="eval-panel input-panel">
+                    <h3>新急單參數</h3>
+
+                    <!-- 快速帶入規格範本 -->
+                    <!-- 齒輪參數 (自由填寫) -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>模數 M</label>
+                            <input type="number" id="eval-M" value="2" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label>齒數 Z</label>
+                            <input type="number" id="eval-Z" value="50">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>齒寬 b (mm)</label>
+                            <input type="number" id="eval-b" value="40">
+                        </div>
+                        <div class="form-group">
+                            <label>每日罰款率</label>
+                            <input type="number" id="eval-penalty-rate" value="0.015" step="0.001">
+                        </div>
+                    </div>
+
+                    <!-- 數量與金額 -->
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>生產數量 (Qty)</label>
+                            <input type="number" id="eval-qty" value="10">
+                        </div>
+                        <div class="form-group">
+                            <label>交易金額 (NTD)</label>
+                            <input type="number" id="eval-revenue" value="30000">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                            <label style="margin-bottom: 0;">期望交期 (精確到小時)</label>
+                            <button id="btn-apply-safe-date" class="btn btn-sm btn-text text-blue" style="padding: 0;">自動帶入安全交期</button>
+                        </div>
+                        <input type="datetime-local" id="eval-deadline" style="margin-top: 0.3rem;">
+                        <small class="text-muted mt-2" style="display: block;">💡 最快安全交貨時間 (不影響舊單): <strong id="safe-deadline-text">計算中...</strong></small>
+                    </div>
+
+                    <!-- 工時即時預覽 -->
+                    <div class="calc-results" id="eval-calc-time">
+                        <div class="time-item"><span>車床</span><strong id="time-turn">--</strong></div>
+                        <div class="time-item"><span>滾齒</span><strong id="time-hob">--</strong></div>
+                        <div class="time-item"><span>磨齒</span><strong id="time-grind">--</strong></div>
+                    </div>
+
+                    <button id="btn-run-eval" class="btn btn-primary btn-block">執行排程衝突與優化評估</button>
+                </div>
+
+                <!-- Results Panel -->
+                <div class="eval-panel results-panel">
+                    <h3>評估結果與對比</h3>
+                    
+                    <div class="financial-report" id="eval-report">
+                        <div class="report-card">
+                            <div class="label">新單預期營收</div>
+                            <div class="value text-blue" id="rep-revenue">NT$ 0</div>
+                        </div>
+                        <div class="report-card">
+                            <div class="label">最適排序新增違約金</div>
+                            <div class="value text-red" id="rep-penalty">NT$ 0</div>
+                        </div>
+                        <div class="report-card highlight">
+                            <div class="label">此單實質獲利</div>
+                            <div class="value" id="rep-net">NT$ 0</div>
+                        </div>
+                    </div>
+                    <div id="eval-decision-msg" class="decision-msg hidden"></div>
+
+                    <!-- AI Dynamic Coefficient Adjustment Panel (auto-populated by JS, zero raw JSON) -->
+                    <div id="ai-dynamics-panel" class="hidden"></div>
+
+                    <!-- AI Decision Report -->
+                    <div id="ai-decision-container" class="hidden" style="margin-bottom: 1.5rem;">
+                        <button id="btn-ai-decision" class="btn btn-block" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; border: none; font-weight: 600;">🤖 產出 AI 決策評估報告</button>
+                        <div id="ai-decision-report" class="mt-3 hidden" style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: var(--radius); padding: 1.5rem; font-size: 0.95rem; line-height: 1.6;"></div>
+                    </div>
+
+                    <div class="gantt-compare">
+                        <h4>A. 原排程 (前 15 日局部)</h4>
+                        <div class="gantt-container small" id="gantt-before"></div>
+                        
+                        <h4 class="mt-4">B. 插單優化後排程 (局部)</h4>
+                        <div class="gantt-container small" id="gantt-after"></div>
+                        
+                        <div class="gantt-legend mt-2">
+                            <span class="legend-item"><span class="color-box bg-orange pulse"></span>新插單</span>
+                            <span class="legend-item"><span class="color-box border-red"></span>受害延誤舊單</span>
+                            <span class="legend-item"><span class="color-box" style="background: repeating-linear-gradient(45deg, #e2e8f0, #e2e8f0 3px, #cbd5e1 3px, #cbd5e1 6px); border: 1px solid #cbd5e1;"></span>機台換線 (Setup)</span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                        <button id="btn-cancel-insert" class="btn" style="flex: 1; background: var(--bg-color); border: 1px solid var(--border); color: var(--text-main);">放棄接單</button>
+                        <button id="btn-apply-insert" class="btn btn-success hidden" style="flex: 2;">寫入新工單並應用排程</button>
+                        <button id="btn-manager-override" class="btn btn-danger hidden" style="flex: 2;">主管特許強制覆核</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
