@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: gear-scheduler-backend
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false          # 在 Render 後台手動填入，不會存進這個 repo
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: ALLOWED_ORIGINS
+        sync: false          # 部署完成後填入您的 GitHub Pages 網址，例如 https://your-username.github.io
+      - key: JWT_SECRET_KEY
+        generateValue: true  # Render 會自動產生一組隨機密鑰
+      - key: JWT_EXPIRE_MINUTES
+        value: "720"
+      - key: DATABASE_URL
+        sync: false          # 留空則使用內建 SQLite；若要接正式 Postgres 才需要填
+
+# 注意：Render 免費方案的檔案系統在「每次重新部署」時會重置，
+# SQLite 檔案在同一次部署期間會持續保存，但重新 deploy 後會恢復成種子資料。
+# 若需要跨部署永久保存資料，請額外建立一個 Render Postgres（有免費額度），
+# 並把它的連線字串填進上面的 DATABASE_URL 環境變數即可，程式碼完全不用改。
